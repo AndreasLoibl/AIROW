@@ -1,0 +1,13 @@
+[Unit]
+Description=AIROW Shiny App
+After=network.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=su
+ExecStart=/bin/nohup /bin/R -e "AIROW.demo::run_app(options = list(port = 3752))" > /home/su/shinyapp.log 2>&1 &
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,54 @@
+---
+
+
+- name: Pull shinyApp from git via Rscript launch_Demo.R
+  hosts: shinyservers
+  become: no
+  remote_user: "{{ developer }}"
+  #become_user: "{{ developer }}"
+  environment:
+          R_LIBS_USER: /home/{{ developer }}/R/lib
+  tags: developer_tasks
+
+  tasks:
+
+    - name: add ENV-variable R_LIBS_USER to .bash_profile
+      lineinfile:
+        path: /home/{{ developer }}/.bash_profile
+        line: export R_LIBS_USER="/home/{{ developer }}/R/lib"
+
+    - name: md ~/R if it doesn't exist
+      remote_user: "{{ developer }}"
+      become: no
+      ansible.builtin.file:
+        path: "/home/{{ developer }}/R/lib"
+        state: directory
+        mode: '0755'
+
+    - name: Install R-packages
+      # since I don't think .bash_profile is sourced, set environment
+      #command: R -e "install.packages(c{{R_pkgs}}, repos='http://cran.rstudio.com/')" > /dev/tcp/localhost/4000 2>&1
+      command: R -e "install.packages(c{{R_pkgs}}, repos='http://cran.rstudio.com/')"
+      #async: 45
+      #poll: 5
+
+    - name: launch_Demo.R - require devtools
+      command: R -e "require('devtools')"
+
+    - name: launch_Demo.R - install_github
+      command: R -e "devtools::install_github( repo = 'kulmak/AIROW.demo', force = TRUE )"
+
+
+    - name: run launch_Demo.R - service:"{{ shinyApp_port }}"
+      command: nohup R -e "AIROW.demo::run_app(options = list(port = "{{ shinyApp_port }}"))" &
+
+    - name: Check if port "{{ shinyApp_port }}" is listening -- doesn't return from previous nuhup
+      wait_for:
+        port: "{{ shinyApp_port }}"
+        delay: 5
+        timeout: 10
+        msg: "Timeout waiting for port {{ shinyApp_port }} to respond"
+      register: port_check
+      ignore_errors: no
+
+...

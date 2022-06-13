@@ -1,0 +1,99 @@
+---
+
+- name: Update shinyservers
+  hosts: shinyservers
+  remote_user: "{{ superuser }}"
+  become: yes
+  tags: root_tasks
+
+  tasks:
+
+    - name: OS-Version
+      ansible.builtin.debug:
+        msg: Is this CentOS-7 ? {{ inventory_hostname }} =
+             {{ ansible_distribution }}-{{ ansible_distribution_major_version }}
+      #when:
+      #- ansible_distribution == 'CentOS'
+      #- ansible_distribution_major_version == '7'
+
+    - name: end play if not centos7
+      ansible.builtin.meta: end_host
+      #meta: end_host
+      when: ansible_facts['os_family'] == 'RedHat' and ansible_facts ['distribution_major_version'] != '7'
+
+    - name: create the user developer
+      ansible.builtin.user:
+        name: "{{ developer }}"
+        shell: /bin/bash
+        create_home: YES
+        #groups: admins,developers
+        password: "{{ developer_password | password_hash('sha512') }}"
+        append: yes
+
+    - name: Update all installed packages using YUM module
+      yum:
+        name: '*'
+        state: latest
+        update_cache: yes
+        update_only: yes
+      register: yum_update_status
+
+    - name: Remove packages not needed anymore
+      yum:
+       autoremove: yes
+
+    - name: Reboot when packages were updated
+      reboot:
+      when: yum_update_status.changed
+
+    - name: Enable EPEL Repository on CentOS 7
+      yum:
+        name: epel-release
+        state: latest
+        #become: True
+      when: ansible_facts['os_family'] == 'RedHat' and ansible_facts ['distribution_major_version'] == '7'
+
+
+    - name: Install additional yum-packages in latest version
+      yum:
+        name: '{{yum_pkgs}}'
+        state: latest
+        update_cache: True
+        #msg: {{ item }}
+
+    - name: enable and start additional yum-pkgs as services_on_boot
+      ansible.builtin.service:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      when: "item in services_on_boot"
+      with_items: '{{ services_on_boot }}'
+
+    - name: edit /etc/sudoers
+      lineinfile:
+        path: /etc/sudoers
+        line: '{{ item }}'
+      with_items:
+       #- 'root ALL=(ALL) ALL'
+        - '{{ superuser}}      ALL=(ALL) ALL '
+        - 'Cmnd_Alias SHINY_APP = /usr/bin/systemctl start shinyApp, /usr/bin/systemctl stop shinyApp, /usr/bin/systemctl status shinyApp'
+        - '{{ developer}}      ALL=(ALL)  SHINY_APP'
+
+
+#    - name: Install Shiny-Server-pkg
+#      yum:
+#        name: https://download3.rstudio.org/centos7/x86_64/shiny-server-1.5.17.973-x86_64.rpm
+#        state: present
+
+
+
+#    - name: run launch_Demo.R
+#      script: /home/"{{ superuser }}"/ansible/launch_Demo.R \> \/dev\/tcp\/localhost\/4000 2\>\&1
+
+    - name: switch off setenforce
+      command: setenforce 0
+
+
+
+
+...
