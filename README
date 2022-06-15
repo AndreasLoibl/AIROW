@@ -1,0 +1,42 @@
+- Installation: CentOS7 - minimal, 150 GB auto-partition, no policies
+
+- yum update
+
+- useradd -m su; # my superuser
+- /etc/sudoers:   su  ALL=(ALL) ALL
+
+- time:  chrony throws socket error -> ntpd
+
+# SCAP: (what would audit-2.8.5-4.el7.x86_64 be good for; sudo ??)
+yum -y install openscap-scanner scap-security-guide
+# available profiles:
+oscap info "/usr/share/xml/scap/ssg/content/ssg-centos7-xccdf.xml"
+time oscap xccdf eval --profile hipaa --fetch-remote-resources --report  /usr/share/nginx/html/report.html /usr/share/xml/scap/ssg/content/ssg-rhel7-xccdf.xml
+
+oscap info /usr/share/xml/scap/ssg/content/ssg-centos7-xccdf.xml   # or any ssg-*
+
+oscap xccdf eval --profile {standard|pci-dss} [--fetch-remote-resources] --report  /usr/share/nginx/html/report.html /usr/share/xml/scap/ssg/content/ssg-centos7-xccdf.xml
+-->
+rpm -Va --noconfig | grep '^..5'
+   -> R-core-3.6.0-1.el7.x86_64
+
+# time oscap xccdf eval --profile hipaa --fetch-remote-resources --report  /usr/share/nginx/html/report.html /usr/share/xml/scap/ssg/content/ssg-rhel7-xccdf.xml
+   -> since this is for RHEL7 everything is tested against RedHat, everything "not applicable"
+
+
+
+
+
+todo:
+- letsencrypt
+- firewalld: 22,80,443
+
+- Citrx
+  - windows Lizenz-Server (VM allowed?)
+  - Lizenzen
+
+- Monitoring
+  - Grafana
+
+- CD/CI
+  jenkins

@@ -3,27 +3,23 @@
 
 - name: Pull shinyApp from git via Rscript launch_Demo.R
   hosts: shinyservers
-  become: no
-  remote_user: "{{ developer }}"
-  #become_user: "{{ developer }}"
+  remote_user: "{{ superuser }}"
+  gather_facts: no
+  #where do all the developers R-libs go? ->   R_LIBS_USER
   environment:
           R_LIBS_USER: /home/{{ developer }}/R/lib
   tags: developer_tasks
 
   tasks:
 
-    - name: add ENV-variable R_LIBS_USER to .bash_profile
-      lineinfile:
-        path: /home/{{ developer }}/.bash_profile
-        line: export R_LIBS_USER="/home/{{ developer }}/R/lib"
-
-    - name: md ~/R if it doesn't exist
-      remote_user: "{{ developer }}"
-      become: no
-      ansible.builtin.file:
-        path: "/home/{{ developer }}/R/lib"
-        state: directory
-        mode: '0755'
+    - name: create the user developer
+      ansible.builtin.user:
+        name: "{{ developer }}"
+        shell: /bin/bash
+        create_home: YES
+        #groups: admins,developers
+        password: "{{ developer_password | password_hash('sha512') }}"
+        append: yes
 
     - name: Install R-packages
       # since I don't think .bash_profile is sourced, set environment
@@ -38,9 +34,15 @@
     - name: launch_Demo.R - install_github
       command: R -e "devtools::install_github( repo = 'kulmak/AIROW.demo', force = TRUE )"
 
-
     - name: run launch_Demo.R - service:"{{ shinyApp_port }}"
-      command: nohup R -e "AIROW.demo::run_app(options = list(port = "{{ shinyApp_port }}"))" &
+      # command: nohup R -e "AIROW.demo::run_app(options = list(port = "{{ shinyApp_port }}"))" &
+      become: YES
+      ansible.builtin.systemd:
+        name: shinyApp
+        state: started
+        daemon_reload: yes
+        enabled: yes
+      tags: systemd
 
     - name: Check if port "{{ shinyApp_port }}" is listening -- doesn't return from previous nuhup
       wait_for:

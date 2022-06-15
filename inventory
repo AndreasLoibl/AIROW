@@ -2,14 +2,23 @@
 131.130.97.118
 
 [shinyservers:vars]
+# su in /etc/sudoers
 superuser=su
-developer=karol
-developer_password=karol_pass
+# shinyApp developer
+developer=siggi
+developer_password=row
+# environment for all R-libs in userspace
+USERSPACE_R_LIBS.key=R_LIBS_USER
+USERSPACE_R_LIBS.val=/home/$USER/R/lib
+ansible_python_interpreter=/usr/bin/python
+
 
 # nc_port=4000
 # invoke for listening:   nc -lk 4000 ; not working yet
 
 shinyApp_port=3752
+
+# chrony throws a socket error -> ntpd -> block with firewall *:123
 
 yum_pkgs=["vim", "lsof", "ntp", "sudo", "libcurl", "libcurl-devel", "openssl", "openssl-devel", "libxml2-devel", "R", "nginx", "certbot-nginx", "ca-certificates"]
 R_pkgs="('rmarkdown', 'shinyMobile', 'shinyWidgets', 'devtools', 'curl', 'shiny')"
@@ -17,5 +26,5 @@ services_on_boot=["ntpd", "nginx"]
 
 
 # todo
-#   ntp
+#   ntpd disable public
 #
