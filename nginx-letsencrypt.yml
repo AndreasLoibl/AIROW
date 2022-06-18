@@ -1,0 +1,193 @@
+---
+
+# inventory:: {{ yum_pkgs }} already installed -> "nginx", "certbot-nginx", "ca-certificates"
+# inventory:: {{ services_on_boot}} already running-> ntpd
+
+# copy nginx-letsencrypt
+# change server
+# set kernel-param for http forward ?
+- name: Update shinyservers
+  hosts: shinyservers
+  remote_user: "{{ superuser }}"
+  become: yes
+  tags: run nginx with letsencrypt
+
+  tasks:
+    - name: yum::Install nginx, letsencrypt yum-packages in latest version
+      yum: # redundant, since subset of inventory::yum_pkgs
+        name: 'nginx, certbot-nginx, ca-certificates'
+        state: latest
+        update_cache: True
+      tags: yum
+
+    - name: nginx::copy nginx.conf with "map" entry
+      ansible.builtin.copy:
+        src:  src/etc-nginx-nginx.conf
+        dest: "{{ nginx_serverfile}}"
+        owner: root
+        group: root
+        mode: '0644'
+        backup: yes
+      tags: nginx
+
+    - name: nginx::copy nginx vhost
+      ansible.builtin.copy:
+        src:  src/etc-nginx-conf.d-row.vdc.ac.conf
+        dest: "{{ nginx_vhostfile}}"
+        owner: root
+        group: root
+        mode: '0644'
+        backup: yes
+      tags: nginx
+
+    - name: "nginx::replace::vhostfile server_name -> FQDN"
+      ansible.builtin.replace:
+        path: '{{ item }}'
+        regexp: '\$FQDN='
+        replace: '{{ FQDN }}'
+        backup: yes
+      with_items:
+        - "{{ nginx_serverfile}}"
+        - "{{nginx_vhostfile}}"
+      tags: nginx
+
+    - name: "nginx::systemd::reload nginx"
+      ansible.builtin.systemd:
+        name: nginx
+        state: restarted
+        daemon_reload: yes
+        enabled: yes
+      tags: nginx
+
+    #- name: certbot -> get first certificate[s]
+    #  command:  certbot --nginx -d {{ FQDN }} # certbot --nginx -d example.com -d www.example.com
+
+    - name: "md::Create required directories in /etc/letsencrypt"
+      file:
+        path: "/etc/letsencrypt/{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: u=rwx,g=x,o=x
+      with_items:
+      - account
+      - certs
+      - csrs
+      - keys
+      tags: letsencrypt
+
+    - name: "md:: Create .well-known/acme-challenge directory"
+      file:
+        path: "{{ nginx_root }}/.well-known/acme-challenge"
+        state: directory
+        owner: root
+        group: root
+        mode: u=rwx,g=rx,o=rx
+      tags: letsencrypt
+
+    - name: "openssl::Generate a Let's Encrypt account key"
+      shell: "if [ ! -f {{ letsencrypt_account_key }} ]; then openssl genrsa 4096 | sudo tee {{ letsencrypt_account_key }}; fi"
+      tags: letsencrypt
+
+    - name: "openssl::Generate Let's Encrypt private key"
+      shell: "openssl genrsa 4096 | sudo tee /etc/letsencrypt/keys/{{ FQDN }}.key"
+      tags: letsencrypt
+
+    - name: "openssl::Generate Let's Encrypt CSR"
+      #shell: "openssl req -new -sha256 -key /etc/letsencrypt/keys/{{ FQDN }}.key -subj \"/CN={{ FQDN }}\" -reqexts SAN -config <(cat {{ openssl_cnf }} <(printf \"\n[SAN]\nsubjectAltName=DNS:{{ FQDN }},DNS:www.{{ FQDN }}\")) | sudo tee /etc/letsencrypt/csrs/{{ FQDN }}.csr"
+      shell: "openssl req -new -sha256 -key /etc/letsencrypt/keys/{{ FQDN }}.key -subj \"/CN={{ FQDN }}\" -reqexts SAN -config <(cat {{ openssl_cnf }} <(printf \"\n[SAN]\nsubjectAltName=DNS:{{ FQDN }}\")) | sudo tee /etc/letsencrypt/csrs/{{ FQDN }}.csr"
+      args:
+        executable: /bin/bash
+      tags: letsencrypt
+
+    - name: "letsencrypt:: Begin Let's Encrypt challenges"
+      letsencrypt:
+        acme_directory: "{{ acme_directory }}"
+        acme_version: "{{ acme_version }}"
+        account_key_src: "{{ letsencrypt_account_key }}"
+        account_email: "{{ acme_email }}"
+        terms_agreed: 1
+        challenge: "{{ acme_challenge_type }}"
+        csr: "{{ letsencrypt_csrs_dir }}/{{ FQDN }}.csr"
+        dest: "{{ letsencrypt_certs_dir }}/{{ FQDN }}.crt"
+        fullchain_dest: "{{ letsencrypt_certs_dir }}/fullchain_{{ FQDN }}.crt"
+        remaining_days: 91
+      register: acme_challenge_your_domain
+      tags: letsencrypt
+
+    - name: "letsencrypt::Implement http-01 challenge files"
+      copy:
+        content: "{{ acme_challenge_your_domain['challenge_data'][item]['http-01']['resource_value'] }}"
+        dest: "{{ nginx_root }}/{{ acme_challenge_your_domain['challenge_data'][item]['http-01']['resource'] }}"
+        owner: root
+        group: root
+        mode: u=rw,g=r,o=r
+      with_items:
+      - "{{ FQDN }}"
+      #- "{{ domain_name }}"
+      tags: letsencrypt
+
+    - name: "letsencrypt::Complete Let's Encrypt challenges"
+      letsencrypt:
+        acme_directory: "{{ acme_directory }}"
+        acme_version: "{{ acme_version }}"
+        account_key_src: "{{ letsencrypt_account_key }}"
+        account_email: "{{ acme_email }}"
+        challenge: "{{ acme_challenge_type }}"
+        csr: "{{ letsencrypt_csrs_dir }}/{{ FQDN }}.csr"
+        dest: "{{ letsencrypt_certs_dir }}/{{ FQDN }}.crt"
+        chain_dest: "{{ letsencrypt_certs_dir }}/chain_{{ FQDN }}.crt"
+        fullchain_dest: "{{ letsencrypt_certs_dir }}/fullchain_{{ FQDN }}"
+        data: "{{ acme_challenge_your_domain }}"
+        # structure for letsencrypt
+      tags: letsencrypt
+
+    # - name: nginx::service::make sure nginx, is started (some ntpd as well)
+    #   ansible.builtin.service:  # redundant, since subset of inventory::services_on_boot
+    #     name: "{{ item }}"
+    #     enabled: true
+    #     state: started
+    #   with_items: 'nginx'
+
+    - name: nginx::copy nginx vhost-ssl
+      ansible.builtin.copy:
+        src:  src/etc-nginx-conf.d-row.vdc.ac_ssl.conf
+        dest: "{{ nginx_vhostfile_ssl}}"
+        owner: root
+        group: root
+        mode: '0644'
+        backup: yes
+      tags: nginx,end
+
+    - name: "nginx::replace::vhostfile_ssl server_name -> FQDN"
+      ansible.builtin.replace:
+        path: "{{ item }}"
+        regexp: '\$FQDN'
+        replace: '{{ FQDN }}'
+        backup: yes
+      with_items:
+        - "{{nginx_vhostfile_ssl}}"
+      tags: nginx
+
+    - name: "nginx::systemd::reload nginx"
+      ansible.builtin.systemd:
+        name: nginx
+        state: restarted
+        daemon_reload: yes
+        enabled: yes
+      tags: nginx,end
+
+    - name: crontab "3 17 * * * /usr/bin/certbot renew --quiet"
+      ansible.builtin.cron:
+        name: "check renew ssl-cert"
+        minute: "17"
+        hour: "3"
+        job: "/usr/bin/certbot renew --quiet"
+      tags: letsencrypt
+## todo:
+#
+
+
+
+
+...

@@ -2,20 +2,51 @@
 131.130.97.118
 
 [shinyservers:vars]
-# su in /etc/sudoers
+# su in /etc/sudoers from installation su ALL=(ALL) ALL
 superuser=su
 # shinyApp developer
-developer=siggi
+developer=karol
 developer_password=row
-# environment for all R-libs in userspace
-USERSPACE_R_LIBS.key=R_LIBS_USER
-USERSPACE_R_LIBS.val=/home/$USER/R/lib
+developer_repo=kulmak
+
+sql_admin=
+sql_admin_pw=
+sql_DB_row_admin=
+sql_DB_row_admin=
+
+
+# environment for all R-libs in userspace -> gone to /etc/profile
+#USERSPACE_R_LIBS.key=R_LIBS_USER
+#USERSPACE_R_LIBS.val=/home/$USER/R/lib
 ansible_python_interpreter=/usr/bin/python
 
 
 # nc_port=4000
 # invoke for listening:   nc -lk 4000 ; not working yet
 
+FQDN="row.vdc.ac"
+nginx_root="/usr/share/nginx/html"
+# 'vdc.ac row.vdc.ac' maybe buy row.ac domain?
+nginx_serverfile="/etc/nginx/nginx.conf"
+nginx_vhostfile="/etc/nginx/conf.d/row.vdc.ac.conf"
+nginx_vhostfile_ssl="/etc/nginx/conf.d/row.vdc.ac_ssl.conf"
+
+## letsencrypt
+acme_challenge_type="http-01"
+acme_directory="https://acme-v02.api.letsencrypt.org/directory"
+acme_version="2"
+acme_email="andreas.loibl@univie.ac.at"
+letsencrypt_dir="/etc/letsencrypt"
+letsencrypt_keys_dir="/etc/letsencrypt/keys"
+letsencrypt_csrs_dir="/etc/letsencrypt/csrs"
+letsencrypt_certs_dir="/etc/letsencrypt/certs"
+letsencrypt_account_key="/etc/letsencrypt/account/account.key"
+# domain_name: see above
+openssl_cnf="/etc/pki/tls/openssl.cnf"  /etc/pki/tls/openssl.cnf
+### /letsencrypt
+
+
+shinyApp_service="AIROW.demo"
 shinyApp_port=3752
 
 # chrony throws a socket error -> ntpd -> block with firewall *:123

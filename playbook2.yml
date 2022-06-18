@@ -1,0 +1,96 @@
+---
+# everything developer specific for R and shinyAPP
+
+- name: Pull shinyApp from git via Rscript launch_Demo.R
+  hosts: shinyservers
+  remote_user: "{{ superuser }}"
+  gather_facts: no
+
+  environment: #where do all the developers R-libs go? ->   R_LIBS_USER
+          R_LIBS_USER: /home/{{ developer }}/R/lib
+  tags: developer_tasks
+
+  tasks:
+
+    - name: create the user developer
+      ansible.builtin.user:
+        name: "{{ developer }}"
+        shell: /bin/bash
+        create_home: YES
+        #groups: admins,developers
+        password: "{{ developer_password | password_hash('sha512') }}"
+        append: yes
+
+    - name: copy system-script shinyApp
+      ansible.builtin.copy:
+        src:  src/etc-systemd-system-shinyApp.service
+        dest: /etc/systemd/system/shinyApp.service
+        owner: root
+        group: root
+        mode: '0644'
+      tags: systemd
+
+    - name: shinyApp.service runas {{ developer }}
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/system/shinyApp.service
+        regexp: '^User='
+        line: "User={{ developer }}"
+        backrefs: yes
+      tags: systemd
+
+    - name: shinyApp runs service  {{ shinyApp_service }}
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/system/shinyApp.service
+        regexp: "^ExecStart=/bin/nohup /bin/R -e"
+        line: 'ExecStart=/bin/nohup /bin/R -e "{{ shinyApp_service }}::run_app(options = list(port = 3752))"'
+        backrefs: yes
+      tags: systemd
+
+
+    - name: set shinyApp.env vars
+      lineinfile:
+        path: /etc/systemd/system/shinyApp.env
+        line: '{{ item }}'
+        state: present
+        create: yes
+      with_items:
+        - "# populated via playbook2:"
+        - R_LIBS_USER=/home/{{ developer }}/R/lib
+      tags: systemd
+
+    - name: Install R-packages
+      # since I don't think .bash_profile is sourced, set environment
+      #command: R -e "install.packages(c{{R_pkgs}}, repos='http://cran.rstudio.com/')" > /dev/tcp/localhost/4000 2>&1
+      command: R -e "install.packages(c{{R_pkgs}}, repos='http://cran.rstudio.com/')"
+      #async: 45
+      #poll: 5
+      tags: R
+
+    - name: launch_Demo.R -part = require devtools
+      command: R -e "require('devtools')"
+      tags: R
+
+    - name: launch_Demo.R - part = install_github
+      command: R -e "devtools::install_github( repo = '{{developer_repo}}/{{ shinyApp_service }}', force = TRUE )"
+      tags: git
+
+    - name: launch_Demo.R - part = run service:"{{ shinyApp_port }}"
+      # command: nohup R -e "AIROW.demo::run_app(options = list(port = "{{ shinyApp_port }}"))" &
+      become: YES
+      ansible.builtin.systemd:
+        name: shinyApp
+        state: started
+        daemon_reload: yes
+        enabled: yes
+      tags: systemd
+
+    - name: shinyApp up ? -> check if port "{{ shinyApp_port }}" is listening
+      wait_for:
+        port: "{{ shinyApp_port }}"
+        delay: 5
+        timeout: 10
+        msg: "Timeout waiting for port {{ shinyApp_port }} to respond"
+      register: port_check
+      ignore_errors: no
+
+...

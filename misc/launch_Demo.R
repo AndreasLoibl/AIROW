@@ -1,6 +1,8 @@
 #! /usr/bin/env Rscript
 # chmod 755 this script
 
+# this script was provided by Karol, but segmented into chunks for ansible processing
+
 # script to update shiny-server
 # havent't figured out how to install repos for CRAN, so point to it as argument
 

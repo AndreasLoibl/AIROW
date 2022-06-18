@@ -1,0 +1,7 @@
+---
+
+- import_playbook: playbook1.yml
+- import_playbook: playbook2.yml
+- import_playbook: nginx-letsencrypt.yml
+
+...

@@ -1,10 +1,12 @@
 ---
+# general admin tasksto prepare Server
 
 - name: Update shinyservers
   hosts: shinyservers
   remote_user: "{{ superuser }}"
   become: yes
   tags: root_tasks
+
 
   tasks:
 
@@ -58,6 +60,7 @@
         create: yes
       with_items:
         - export R_LIBS_USER="$HOME/R/lib"
+      tags: admin_tasks
 
     - name: Update all installed packages using YUM module
       yum:
@@ -99,55 +102,9 @@
       with_items: '{{ services_on_boot }}'
 
 
-
-    - name: copy system-script shinyApp
-      ansible.builtin.copy:
-        src:  src/etc-systemd-system-shinyApp.service
-        dest: /etc/systemd/system/shinyApp.service
-        owner: root
-        group: root
-        mode: '0644'
-      tags: systemd
-
-    - name: shinyApp.service runas {{ developer }}
-      ansible.builtin.lineinfile:
-        path: /etc/systemd/system/shinyApp.service
-        regexp: '^User='
-        line: "User={{ developer }}"
-        backrefs: yes
-      tags: systemd
-
-    - name: set shinyApp.env vars
-      lineinfile:
-        path: /etc/systemd/system/shinyApp.env
-        line: '{{ item }}'
-        state: present
-        create: yes
-      with_items:
-        - "# populated via playbook1:"
-        - R_LIBS_USER=/home/{{ developer }}/R/lib
-      tags: systemd
-
 #    - name: Install Shiny-Server-pkg if wanted for sample demonstration
 #      yum:
 #        name: https://download3.rstudio.org/centos7/x86_64/shiny-server-1.5.17.973-x86_64.rpm
 #        state: present
-
-
-
-#    - name: run launch_Demo.R
-#      script: /home/"{{ superuser }}"/ansible/launch_Demo.R \> \/dev\/tcp\/localhost\/4000 2\>\&1
-
-    - name: enable shinyApp.services
-      ansible.builtin.systemd:
-        name: shinyApp.service
-        # state: started -> userspace of {{developer}}
-        enabled: yes
-        daemon_reload: yes
-      tags: systemd
-
-#todo
-# X11 forwarding
-
 
 ...
