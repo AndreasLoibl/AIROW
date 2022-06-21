@@ -9,10 +9,13 @@ developer=karol
 developer_password=row
 developer_repo=kulmak
 
-sql_admin=
-sql_admin_pw=
-sql_DB_row_admin=
-sql_DB_row_admin=
+mysql_yum_pkgs=['']
+mysql_root='system_root'
+mysql_root_password='aiRows3cr3tpw_202206'
+
+mysql_DB_airow='airow'
+mysql_DB_airow_admin='yujin'
+mysql_DB_airow_admin_pw='yUjin_202006'
 
 
 # environment for all R-libs in userspace -> gone to /etc/profile

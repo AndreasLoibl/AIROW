@@ -1,0 +1,137 @@
+---
+# provide a MySQL DB for a user with all privileges
+# see inventory:
+# sql_admin=
+# sql_admin_pw=
+# sql_DB_row_admin=
+# sql_DB_row_admin=
+- name: Deploy MySQL 8
+  hosts: shinyservers
+  remote_user: "{{ superuser }}"
+  become: yes
+  tags: root_tasks
+
+  vars_prompt:
+     - name: download repo from Oracle interactiv
+       vars_prompt:
+         prompt: What is your username? https://dev.mysql.com/downloads/repo/yum/mysql80-community-release-el7-6.noarch.rpm
+         private: no
+
+     - name: password
+       prompt: What is your password?
+
+
+  tasks:
+
+       - name: Print a message
+         ansible.builtin.debug:
+           msg: 'Logging in as {{ username }}'
+
+       - name: Install community repo #CentOS7, el7
+         yum:
+            name: https://dev.mysql.com/downloads/repo/yum/mysql80-community-release-el7-6.noarch.rpm
+            state: present
+
+       - name: Install MySQL
+         yum: name=mysql-server
+              state=installed
+
+       - name: Ensure mysql service is running (mysqld)
+         systemd:
+          name: mysqld
+          state: restarted
+          enabled: yes
+
+       - name: Ensure root user can only login from localhost
+         mysql_user:
+            login_password: "{{ mysql_root_password }}"
+            check_implicit_admin: yes
+            name: root
+            host: "{{ item }}"
+            password: "{{ mysql_root_password }}"
+            state: present
+         with_items:
+            - localhost
+            - 127.0.0.1
+            - ::1
+
+       - name: system wide /etc/my.cnf
+         template:
+          src: src/etc_my.cnf
+          dest: /etc/my.cnf
+
+       - name: Reload privilege tables
+         command: |
+              mysql -p{{ mysql_root_password }} -ne "{{ item }}"
+         with_items:
+              - FLUSH PRIVILEGES
+         changed_when: False
+
+      # - name: Remove anonymous users
+      #   command: |
+      #    mysql -p{{ mysql_root_password }} -ne "{{ item }}"
+      #   with_items:
+      #    - DELETE FROM mysql.user WHERE User=''
+      #   changed_when: False
+
+       - name: Remove anonymous users
+         community.mysql.mysql_user:
+            name: ''
+            host: localhost
+            state: absent
+
+       - name: Disallow root login remotely
+         command: |
+              mysql -p{{ mysql_root_password }} -ne "{{ item }}"
+         with_items:
+            - DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1')
+         changed_when: False
+
+       - name: Remove test database and access to it
+         command: |
+            mysql -p{{ mysql_root_password }} -ne "{{ item }}"
+         with_items:
+            - DROP DATABASE IF EXISTS test
+            - DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%'
+         changed_when: False
+
+       - name: Reload privilege tables
+         command: |
+            mysql -p{{ mysql_root_password }} -ne "{{ item }}"
+         with_items:
+            - FLUSH PRIVILEGES
+         changed_when: False
+
+       - name: create DB airow
+         community.mysql.mysql_db:
+            name: "{{mysql_DB_airow}}"
+            state: present
+            #encoding: latin1
+            #collation: latin1_general_ci
+
+        #- name: create airow admin
+        # mysql_users:
+        #  - name: "{{mysql_DB_airow_admin}}"
+        #    host: "{{item}}"
+        #    password: "{{mysql_DB_airow_admin_pw}}"
+        #    priv: "{{mysql_DB_airow}}.*:ALL"
+        #    with_items:
+        #      - localhost
+        #      - 127.0.0.1
+        #      - ::1
+
+       - name: Create user with password, all database privileges and 'WITH GRANT OPTION' in db1 and db2
+         community.mysql.mysql_user:
+            state: present
+            name: "{{mysql_DB_airow_admin}}"
+            host: "{{item}}"
+            password: "{{mysql_DB_airow_admin_pw}}"
+            priv:
+              '{{mysql_DB_airow}}.*': 'ALL,GRANT'
+              '*.*': 'FILE,GRANT'
+            with_items:
+              - localhost
+              - 127.0.0.1
+              - ::1
+
+...
